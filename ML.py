@@ -5,6 +5,8 @@ import pandas as pd
 import math
 import threading
 import psutil
+from tqdm import tqdm
+
 
 def test_train_split(self, x:np.ndarray, y:np.ndarray, train_sample_frac:float=0.8):
     assert 0 < train_sample_frac < 1
@@ -20,6 +22,74 @@ def test_train_split(self, x:np.ndarray, y:np.ndarray, train_sample_frac:float=0
     train_x, train_y = x[list(train_set)], y[list(train_set)]
     test_x, test_y = x[list(test_set)], y[list(test_set)]
     return train_x, train_y, test_x, test_y
+
+
+class Gausian_Anomaly:
+    def __init__(self):
+        self.__epsilon = None
+        self.__mean = None
+        self.__var = None
+        self._pdf = np.vectorize(
+            lambda __x_func, __mean_func, __std_func: \
+            (1/(__std_func*(np.sqrt(2*np.pi))))*np.exp(-(np.square(__x_func-__mean_func)/(2*np.square(__std_func))))
+        )
+
+    def _define_pdf(self, func):
+        if type(func) != np.vectorieze:
+            self._pdf = np.vectorize(func)
+        else:
+            self._pdf = func
+
+    def convert_features(self, features, inplace=False):
+        if not inplace:
+            fs = features.copy()
+        else:
+            fs = features
+        for i in range(fs.shape[1]):
+            if shapiro(fs[:,i]).pvalue > 0.05:
+                print(f'converting feature {i+1}')
+                fs[:,i] = np.log(fs[:,i] + np.abs(fs[:,i].min(axis=0))+0.1)
+        return fs if not inplace else None
+    
+    def __fit_predict(*args, **kwargs):
+        def inner(func):
+            features = kwargs['features']
+            pdf_func = kwargs['self_pdf']
+            cls_obj = kwargs['cls_obj']
+            if cls_obj.__mean is None or cls_obj.__var is None:
+                cls_obj.__mean, cls_obj.__var = features.mean(axis=0), features.var(axis=0)
+            pdf_features = pdf_func(features, cls_obj.__mean, cls_obj.__var)
+            return func(pdf_features)
+            """
+            if fit:
+                self.__epsilon = np.prod(pdf_features, axis=1).min()
+                return self.__epsilon
+            return np.array(np.prod(pdf_features, axis=1))
+            """
+        return inner
+
+    def fit(self, features):
+        features = features.copy()
+        @self.__fit_predict(features=features, self_pdf=self._pdf, cls_obj=self)
+        def __fit(pdf_features=None):
+            self.__epsilon = np.prod(pdf_features, axis=1).min()
+            return self.__epsilon
+        return f'Threshold set to: {__fit}'
+
+    def get(self):
+        return self.__mean, self.__var
+    
+    def predict(self, features):
+        features = features.copy()
+        assert self.__epsilon is not None
+        assert self.__mean is not None
+        assert self.__var is not None
+
+        @self.__fit_predict(features=features, self_pdf=self._pdf, cls_obj=self)
+        def __predict(pdf_features=None):
+            return np.array(np.prod(pdf_features, axis=1) >= self.__epsilon, dtype=np.int32)
+        return __predict
+
 
 class Regression:
     def __init__(self, features=1, w=None, b=tf.Variable(tf.random.normal([1, 1], dtype=np.float64)), dtype=np.float64):
