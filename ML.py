@@ -21,7 +21,6 @@ def test_train_split(self, x:np.ndarray, y:np.ndarray, train_sample_frac:float=0
     test_x, test_y = x[list(test_set)], y[list(test_set)]
     return train_x, train_y, test_x, test_y
 
-
 class Regression:
     def __init__(self, features=1, w=None, b=tf.Variable(tf.random.normal([1, 1], dtype=np.float64)), dtype=np.float64):
         if w is None:
